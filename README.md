@@ -44,7 +44,6 @@ AETM/
 ├── models/                  # 训练好的模型
 ├── outputs/                 # 生成结果和评估输出
 ├── matrices/                # 中间矩阵数据
-├── moetm/                   # moETM参考实现
 ├── requirements_training.txt # 依赖包列表
 ├── start_server.sh          # Linux/Mac启动脚本
 ├── start_server.bat         # Windows启动脚本
