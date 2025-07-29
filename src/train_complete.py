@@ -35,7 +35,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='训练多模态主题模型')
     
     # 数据参数
-    parser.add_argument('--data_path', type=str, default='palettes_descriptions.xlsx',
+    parser.add_argument('--data_path', type=str, default='data/palettes_descriptions.xlsx',
                         help='带有描述的调色板数据路径')
     parser.add_argument('--test_size', type=float, default=0.1,
                         help='测试集比例')

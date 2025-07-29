@@ -205,3 +205,50 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# AETM Project Specific
+# Virtual Environment
+aetm_env/
+
+# API Keys and Secrets
+config/secrets.json
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Streamlit
+.streamlit/
+
+# Cache files
+*.pkl.cache
+*.cache
+
+# Backup files
+*.bak
+*.backup
+*_backup.*
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Large output files (optional)
+outputs/metrics_epoch_*.json
+outputs/topic_evaluation_epoch_*.json
+outputs/*.png
+outputs/*.jpg

@@ -14,7 +14,7 @@ def main():
     # 训练参数
     cmd = [
         sys.executable, "src/train_with_separate_encoders.py",
-        "--data_path", "palettes_descriptions.xlsx",
+        "--data_path", "data/palettes_descriptions.xlsx",
         "--num_topics", "50",
         "--embedding_dim", "32",
         "--hidden_dim", "128",

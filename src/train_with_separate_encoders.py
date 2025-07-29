@@ -35,7 +35,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='训练多模态主题模型（分别保存编码器）')
     
     # 数据参数
-    parser.add_argument('--data_path', type=str, default='palettes_descriptions.xlsx',
+    parser.add_argument('--data_path', type=str, default='data/palettes_descriptions.xlsx',
                         help='带有描述的调色板数据路径')
     parser.add_argument('--test_size', type=float, default=0.1,
                         help='测试集比例')
@@ -182,8 +182,10 @@ def preprocess_data(data_path, max_features=2000, test_size=0.1, seed=42):
     joblib.dump(vectorizer, 'models/tfidf_vectorizer.pkl')
     
     vocab = vectorizer.vocabulary_
+    # 转换numpy类型为Python原生类型，以便JSON序列化
+    vocab_serializable = {str(k): int(v) for k, v in vocab.items()}
     with open('models/vocab.json', 'w', encoding='utf-8') as f:
-        json.dump(vocab, f, ensure_ascii=False, indent=2)
+        json.dump(vocab_serializable, f, ensure_ascii=False, indent=2)
     
     print(f"颜色数据维度: {color_data.shape}")
     print(f"文本数据维度: {text_vectors.shape}")
@@ -452,9 +454,31 @@ def calculate_topic_specificity(topic_matrix):
 
 def calculate_cross_modal_alignment(topic_color_matrix, topic_text_matrix):
     """计算跨模态对齐"""
-    # 计算两个矩阵之间的相关性
-    correlation = np.corrcoef(topic_color_matrix.flatten(), topic_text_matrix.flatten())[0, 1]
-    return correlation if not np.isnan(correlation) else 0.0
+    # 确保两个矩阵有相同的主题数量（行数）
+    min_topics = min(topic_color_matrix.shape[0], topic_text_matrix.shape[0])
+    topic_color_matrix = topic_color_matrix[:min_topics]
+    topic_text_matrix = topic_text_matrix[:min_topics]
+    
+    # 计算每个主题在两个模态中的分布相关性
+    correlations = []
+    for i in range(min_topics):
+        color_dist = topic_color_matrix[i] / (topic_color_matrix[i].sum() + 1e-10)
+        text_dist = topic_text_matrix[i] / (topic_text_matrix[i].sum() + 1e-10)
+        
+        # 确保两个分布有相同的长度
+        min_len = min(len(color_dist), len(text_dist))
+        color_dist = color_dist[:min_len]
+        text_dist = text_dist[:min_len]
+        
+        if len(color_dist) > 1 and len(text_dist) > 1:
+            try:
+                corr = np.corrcoef(color_dist, text_dist)[0, 1]
+                if not np.isnan(corr):
+                    correlations.append(corr)
+            except:
+                continue
+    
+    return np.mean(correlations) if correlations else 0.0
 
 def evaluate_topics(model, train_loader, device, epoch, output_dir):
     """评估主题质量"""
@@ -506,8 +530,18 @@ def evaluate_topics(model, train_loader, device, epoch, output_dir):
     metrics['B_ebm'] = 0.0   # 需要批次信息
     
     # 保存评估结果
+    # 转换numpy类型为Python原生类型，以便JSON序列化
+    metrics_serializable = {}
+    for key, value in metrics.items():
+        if isinstance(value, (np.integer, np.floating)):
+            metrics_serializable[key] = float(value)
+        elif isinstance(value, np.ndarray):
+            metrics_serializable[key] = value.tolist()
+        else:
+            metrics_serializable[key] = value
+    
     with open(os.path.join(output_dir, f'topic_evaluation_epoch_{epoch}.json'), 'w') as f:
-        json.dump(metrics, f, indent=4)
+        json.dump(metrics_serializable, f, indent=4)
     
     print(f"主题评估完成，指标: {metrics}")
     return metrics
@@ -518,21 +552,25 @@ def calculate_metrics(model, train_loader, device):
 
 def plot_loss_curves(train_losses, val_losses, output_dir):
     """绘制损失曲线"""
+    # 设置中文字体
+    plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS']
+    plt.rcParams['axes.unicode_minus'] = False
+    
     fig, axes = plt.subplots(2, 3, figsize=(15, 10))
-    fig.suptitle('训练损失曲线', fontsize=16)
+    fig.suptitle('Training Loss Curves', fontsize=16)
     
     loss_types = ['total', 'color', 'text', 'kl', 'score']
-    titles = ['总损失', '颜色损失', '文本损失', 'KL损失', '评分损失']
+    titles = ['Total Loss', 'Color Loss', 'Text Loss', 'KL Loss', 'Score Loss']
     
     for i, (loss_type, title) in enumerate(zip(loss_types, titles)):
         row = i // 3
         col = i % 3
         
-        axes[row, col].plot(train_losses[loss_type], label='训练', color='blue')
-        axes[row, col].plot(val_losses[loss_type], label='验证', color='red')
+        axes[row, col].plot(train_losses[loss_type], label='Train', color='blue')
+        axes[row, col].plot(val_losses[loss_type], label='Validation', color='red')
         axes[row, col].set_title(title)
-        axes[row, col].set_xlabel('轮次')
-        axes[row, col].set_ylabel('损失')
+        axes[row, col].set_xlabel('Epochs')
+        axes[row, col].set_ylabel('Loss')
         axes[row, col].legend()
         axes[row, col].grid(True)
     
@@ -595,8 +633,7 @@ def main():
         optimizer, 
         mode='min', 
         factor=args.lr_scheduler_factor, 
-        patience=args.lr_scheduler_patience, 
-        verbose=True
+        patience=args.lr_scheduler_patience
     )
     
     # 训练循环
@@ -648,8 +685,18 @@ def main():
             metrics_history.append(metrics)
             print(f"  评估指标: {metrics}")
             
+            # 转换numpy类型为Python原生类型，以便JSON序列化
+            metrics_serializable = {}
+            for key, value in metrics.items():
+                if isinstance(value, (np.integer, np.floating)):
+                    metrics_serializable[key] = float(value)
+                elif isinstance(value, np.ndarray):
+                    metrics_serializable[key] = value.tolist()
+                else:
+                    metrics_serializable[key] = value
+            
             with open(os.path.join(args.output_dir, f'metrics_epoch_{epoch+1}.json'), 'w') as f:
-                json.dump(metrics, f, indent=4)
+                json.dump(metrics_serializable, f, indent=4)
         
         # 早停
         if val_loss['total'] < best_val_loss:
@@ -699,13 +746,27 @@ def main():
     plot_loss_curves(train_losses, val_losses, args.output_dir)
     
     # 保存历史数据
-    history = {
-        'train_losses': train_losses,
-        'val_losses': val_losses,
-        'metrics_history': metrics_history
+    # 转换numpy类型为Python原生类型，以便JSON序列化
+    history_serializable = {
+        'train_losses': {k: [float(v) for v in vals] for k, vals in train_losses.items()},
+        'val_losses': {k: [float(v) for v in vals] for k, vals in val_losses.items()},
+        'metrics_history': []
     }
+    
+    # 转换评估指标历史
+    for metrics in metrics_history:
+        metrics_serializable = {}
+        for key, value in metrics.items():
+            if isinstance(value, (np.integer, np.floating)):
+                metrics_serializable[key] = float(value)
+            elif isinstance(value, np.ndarray):
+                metrics_serializable[key] = value.tolist()
+            else:
+                metrics_serializable[key] = value
+        history_serializable['metrics_history'].append(metrics_serializable)
+    
     with open(os.path.join(args.output_dir, 'training_history.json'), 'w') as f:
-        json.dump(history, f, indent=4)
+        json.dump(history_serializable, f, indent=4)
     
     print("训练完成！")
     print(f"模型和矩阵已保存到: {args.save_dir}")
